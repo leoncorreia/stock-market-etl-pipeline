@@ -29,32 +29,35 @@ Build an end-to-end micro-batch pipeline that continuously ingests stock market 
               | stock_market_microbatch
               +----------+----------+
                          |
-      +------------------+------------------+
-      |                  |                  |
-      v                  v                  v
-create_schema     extract_load_prices   compute_analytics
-(Postgres SQL)    (Python ETL)          (Postgres SQL)
-      |                  |                  |
-      +------------------+------------------+
-                         |
-                         v
-                validate_outputs
-                (Python data checks)
-                         |
-                         v
-                    PostgreSQL
-          stock_prices + stock_analytics
+     +---------------------------------------------+
+     |                                             |
+     v                                             v
+create_schema --> apply_migrations --> extract_load_prices
+(Postgres SQL)    (Python SQL files)   (Python ETL)
+                                            |
+                                            v
+                                   compute_analytics
+                                   (Postgres SQL)
+                                            |
+                                            v
+                                   validate_outputs
+                                   (Python data checks)
+                                            |
+                                            v
+                                        PostgreSQL
+                             stock_prices + stock_analytics
 ```
 
 ## Data Flow
 
 1. `create_schema` creates tables and indexes from `sql/schema.sql`.
-2. `extract_load_prices` reads symbols from Airflow Variable `stock_symbols` or `STOCK_SYMBOLS`.
-3. ETL fetches 1-minute bars via `yfinance`, normalizes column names, validates required fields, type-casts, and deduplicates.
-4. Batch insert loads into `stock_prices` using parameterized SQL and `ON CONFLICT (symbol, timestamp) DO NOTHING`.
-5. `compute_analytics` executes `sql/analytics.sql` to upsert rolling metrics into `stock_analytics`.
-6. `validate_outputs` enforces row count, duplicate, and null checks.
-7. ETL run telemetry is persisted in `etl_run_audit` for operational visibility.
+2. `apply_migrations` applies versioned SQL files from `sql/migrations/*.sql` (tracked in `schema_migrations`).
+3. `extract_load_prices` reads symbols from Airflow Variable `stock_symbols` or `STOCK_SYMBOLS`.
+4. ETL fetches 1-minute bars via `yfinance`, normalizes column names, validates required fields, type-casts, and deduplicates.
+5. Batch insert loads into `stock_prices` using parameterized SQL and `ON CONFLICT (symbol, timestamp) DO NOTHING`.
+6. `compute_analytics` executes `sql/analytics.sql` to upsert rolling metrics into `stock_analytics`.
+7. `validate_outputs` enforces row count, duplicate, and null checks.
+8. ETL run telemetry is persisted in `etl_run_audit` for operational visibility.
 
 ## Repository Structure
 
@@ -69,9 +72,12 @@ create_schema     extract_load_prices   compute_analytics
 │       ├── __init__.py
 │       ├── config.py
 │       ├── etl.py
+│       ├── migrations.py
 │       └── validation.py
 ├── sql/
 │   ├── schema.sql
+│   ├── migrations/
+│   │   └── 001_add_etl_run_audit.sql
 │   └── analytics.sql
 ├── tests/
 │   └── test_transformations.py
