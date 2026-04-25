@@ -1,0 +1,5 @@
+pandas
+yfinance
+psycopg2-binary
+pytest
+
